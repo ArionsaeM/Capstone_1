@@ -1,7 +1,7 @@
 USE sample_sales;
 
 -- Sales State Territoty (FL) 
--- SELect * FROM management;
+-- Select * FROM management;
 /*
 Analysis Questions
 ∗ What is total revenue overall for sales in the assigned territory, plus the start date and end date
@@ -30,84 +30,58 @@ WHERE Store_ID BETWEEN 719 AND 729; -- MIN & MAX sales dates for instore sales i
 
 */
 
--- 1 
-SELECT (SELECT SUM(SalesTotal)
-     FROM online_sales
-     WHERE ShiptoState = 'Florida') -- subquery1 
-    + 
-    (SELECT SUM(sale_amount)
+-- 1 -- Store sales only are  calculated here because online sales are not FROM flush
+SELECT 
+	(SELECT SUM(sale_amount)
+    FROM store_sales
+    WHERE Store_ID BETWEEN 719 AND 729)
+    AS FL_SalesAmount, 
+    
+    (SELECT MIN(Transaction_Date)
      FROM store_sales
      WHERE Store_ID BETWEEN 719 AND 729)
-    AS FL_Total_Revenue, -- subquery2
-    -- 2 subqueries added together to make one column 
-    (SELECT MIN(Date)
-     FROM online_sales
-     WHERE ShiptoState = 'Florida')
     AS Start_Date, 
 
-    (SELECT MAX(Date)
-     FROM online_sales
-     WHERE ShiptoState = 'Florida')
-    AS End_Date; -- $6,060,230.60 
+    (SELECT MAX(Transaction_Date)
+     FROM store_sales
+     WHERE Store_ID BETWEEN 719 AND 729)
+    AS End_Date; -- $3930187.55
 
 
 
 /*
 2 What is the revenue breakdown by year and month for the sales territory?
 
-SELECT >> FROM >> WHERE > UNION ALL >> GROUP BY 
+
 */
-
-SELECT
-    YEAR(Sales_Date) AS Sales_Year,
-    MONTH(Sales_Date) AS Sales_Month,
-    SUM(Revenue) AS Total_Revenue
-FROM ( -- UNION ALL inside from because "Sales_Date" is a created colum from this query.
-    SELECT SalesTotal AS Revenue, Date AS Sales_Date
-    FROM online_sales
-    WHERE ShiptoState = 'Florida'
-
-    UNION ALL
-
-    SELECT sale_amount AS Revenue, Transaction_Date AS Sales_Date
-    FROM store_sales
-    WHERE Store_ID BETWEEN 719 AND 729
-) AS Florida_Sales
-
-GROUP BY YEAR(Sales_Date), MONTH(Sales_Date)
-ORDER BY Sales_Year, Sales_Month;
-
-
+SELECT YEAR(Transaction_Date), Month(Transaction_Date), SUM(sale_amount)
+FROM store_sales
+WHERE Store_ID BETWEEN 719 AND 729
+GROUP BY YEAR(Transaction_Date), Month(Transaction_Date)
+;
 
 
 -- 3 Provide a comparison of total revenue for the specific sales territory and the region it belongs to.
 			-- Calculate the revunue of entire south region , then each individual state in the region (FL, TX, SC)
 		 -- SELECT id, region, state FROM management; -- How I know what states are in what region. (ID, 7,8,9,)
-    SELECT
+         
+   SELECT
     South_Sales.State,
-    SUM(South_Sales.Revenue) AS Total_Revenue
+    SUM(South_Sales.Revenue) AS Total_Revenue      
 FROM (
-    SELECT ShipToState AS State, SalesTotal AS Revenue
-    FROM online_sales
-    WHERE ShipToState IN ('Florida', 'Texas', 'South Carolina')
-
-    UNION ALL
-
-    SELECT sl.State, ss.sale_amount AS Revenue
+    SELECT
+        sl.State,
+        ss.sale_amount AS Revenue
     FROM store_sales AS ss
     JOIN store_locations AS sl
         ON ss.Store_ID = sl.StoreID
     WHERE sl.State IN ('Florida', 'Texas', 'South Carolina')
 ) AS South_Sales
-
-GROUP BY South_Sales.State WITH Rollup -- ROLLUP providing the total of the total_rev column with no state but reading the code will provide knowledge that it's the south.
+GROUP BY South_Sales.State
 ORDER BY Total_Revenue DESC;
 /*
-South Region Rev - 15,637,343.20
-FL - 6,060,230.60
+South Region Rev - $7,996,850.12
 */
-
-
 
 
 /*
@@ -115,11 +89,6 @@ FL - 6,060,230.60
 category for the sales territory?
 */
 
-SELECT ID, COUNT(*)
-FROM online_sales
-WHERE ShipToState = 'Florida'
-GROUP BY ID
-ORDER BY COUNT(*) DESC; -- checking to see if each transaction is to one product or multiple.
 
 SELECT ID, COUNT(*)
 FROM store_sales
@@ -127,31 +96,16 @@ WHERE Store_ID BETWEEN 719 AND 729
 GROUP BY ID
 ORDER BY COUNT(*) DESC;
 
-SELECT Category, YEAR(Sales_Date) AS Sales_Year, MONTH(Sales_Date) AS Sales_Month,
-COUNT(*) AS Transaction_Count, AVG(Revenue) AS Average_Transaction
+SELECT Category, YEAR(Transaction_Date) AS Sales_Year, MONTH(Transaction_Date) AS Sales_Month,
+COUNT(*) AS Transaction_Count, AVG(sale_amount) AS Average_Transaction
 
-FROM (
-SELECT os.ProdNum, I_C.Category, os.Date AS Sales_Date,
-    os.SalesTotal AS Revenue
-FROM online_sales AS os
-JOIN products AS p ON os.ProdNum = p.ProdNum
-JOIN inventory_categories AS I_C ON I_C.CategoryId = p.CategoryID
-WHERE os.ShipToState = 'Florida'
-
-UNION ALL 
-
-SELECT ss.Prod_Num,
-    I_C.Category,
-    ss.Transaction_Date AS Sales_Date,
-    ss.sale_amount AS Revenue
 FROM store_sales AS ss
-JOIN products AS p ON ss.Prod_Num = p.ProdNum
+JOIN products AS p
+ ON ss.Prod_Num = p.ProdNum
 JOIN inventory_categories AS I_C ON I_C.CategoryId = p.CategoryID
+WHERE Store_ID BETWEEN 719 and 729
 
-WHERE ss.Store_ID BETWEEN 719 AND 729 ) 
-	AS Florida_Sales
-
-GROUP BY Category, YEAR(Sales_Date), MONTH(Sales_Date) ;
+GROUP BY Category, YEAR(Transaction_Date), MONTH(Transaction_Date) ;
 
 
 
@@ -161,18 +115,34 @@ ranking of online sales performance by state within an online sales territory?
 */
 
 SELECT
-    Store_ID,
-    SUM(sale_amount) AS Total_Revenue
-FROM store_sales
+    SUM(sale_amount) AS Total_Revenue, Store_ID
+    
+FROM store_sales 
 WHERE Store_ID BETWEEN 719 AND 729
 GROUP BY Store_ID
-ORDER BY (Total_Revenue) DESC; -- Store 724 has the highest revenue in the state. @ $618,846.25
+ORDER BY Total_Revenue DESC; -- Store 724 has the highest revenue in the state. @ $618,846.25
+/*
+SELECT
+    SUM(sale_amount) AS Total_Revenue, Store_ID, YEAR(Transaction_Date), MONTH(Transaction_Date)
+    
+FROM store_sales 
+WHERE Store_ID BETWEEN 719 AND 729
+GROUP BY Store_ID, YEAR(Transaction_Date), MONTH(Transaction_Date)
+ORDER BY YEAR(Transaction_Date), MONTH(Transaction_Date); -- Store 724 has the highest revenue in the state. @ $618,846.25
+*/
 
-
+SELECT
+    SUM(sale_amount) AS Total_Revenue, Store_ID, YEAR(Transaction_Date), MONTH(Transaction_Date), StoreLocation
+    
+FROM store_sales ss
+JOIN store_locations as sl
+ON Sl.StoreID = ss.Store_ID
+WHERE Store_ID BETWEEN 719 AND 729
+GROUP BY Store_ID, YEAR(Transaction_Date), MONTH(Transaction_Date)
+ORDER BY YEAR(Transaction_Date), MONTH(Transaction_Date); -- Store 724 has the highest revenue in the state. @ $618,846.25
 
 
 --  What is arecommendation for where to focus sales attention in the next quarter?
-
 
 
 /*
@@ -181,4 +151,30 @@ results of the query you used to answer the question as a .csv file, then open t
 “Save as” to re-save the file as lastname_territory_chart.xlsx (remember to change the file
 extension to .xlsx!). Use the PivotChart options to visualize the query results.
 */
+
+/*
+SELECT m.SalesManager, m.id , m.state, COUNT(m.id) AS online_orders, SUM(os.SalesTotal) AS online_revenue
+FROM online_sales AS os
+JOIN management as m
+ON m.id =  os.id
+WHERE m.SalesManager = 'Lana Ilana' 
+GROUP BY m.id; -- $2130043.05
+
+SELECT 
+    SUM(os.SalesTotal) AS Revenue 
+FROM online_sales AS os
+JOIN products AS p ON os.ProdNum = p.ProdNum
+JOIN inventory_categories AS I_C ON I_C.CategoryId = p.CategoryID
+WHERE os.ShipToState = 'Florida'; -- $2130043.05
+
+SELECT * FROM management;
+ /* 
+ WEST being the only region where online orders come FROM is the reason why even though FL
+ has orders shipped to the state (ShipToState) so the revenue goes to Colorado 
+ with the RegionalDirector (CassieChambers).
+ */
+ 
+
+
+
 
